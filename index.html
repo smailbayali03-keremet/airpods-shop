@@ -1074,8 +1074,7 @@ function drawFrame(idx) {
   const dw = sw * scale, dh = sh * scale;
   const dx = (cw - dw) / 2, dy = (ch - dh) / 2;
 
-  const frameBg = getComputedStyle(document.documentElement).getPropertyValue('--frame-bg').trim() || '#eeeeed';
-  ctx.fillStyle = frameBg;
+  ctx.fillStyle = '#f5f5f7';
   ctx.fillRect(0, 0, cw, ch);
   ctx.drawImage(img, cropX, cropY, sw, sh, dx, dy, dw, dh);
   currentIdx = idx;
@@ -1105,30 +1104,32 @@ function preload() {
   });
 }
 
-// ── Text panel animations
-function animatePanel(id, driver, startPct, endPct) {
-  const box = document.getElementById(id);
-  if (!box) return;
-  const els = box.querySelectorAll('.t-label,.t-headline,.t-sub,.t-chip');
+// ── Panel show / hide (called from onUpdate — no separate ScrollTriggers)
+const PANEL_RANGES = [
+  ['tp1',  2, 19],
+  ['tp2', 22, 41],
+  ['tp3', 44, 62],
+  ['tp4', 65, 81],
+  ['tp5', 84, 97],
+];
+const panelState = {}; // id → true/false (currently visible)
 
-  // IN
-  gsap.to(els, {
-    opacity: 1, y: 0, duration: .7, stagger: .1, ease: 'power3.out',
-    scrollTrigger: {
-      trigger: driver,
-      start: `${startPct}% top`,
-      end:   `${startPct + 7}% top`,
-      toggleActions: 'play none none reverse',
-    }
-  });
-  // OUT
-  gsap.to(els, {
-    opacity: 0, y: -16, duration: .45, stagger: .06, ease: 'power2.in',
-    scrollTrigger: {
-      trigger: driver,
-      start: `${endPct - 5}% top`,
-      end:   `${endPct}% top`,
-      toggleActions: 'play none none reverse',
+function syncPanels(pct) {
+  PANEL_RANGES.forEach(([id, start, end]) => {
+    const shouldShow = pct >= start && pct < end;
+    if (shouldShow === panelState[id]) return; // no change
+    panelState[id] = shouldShow;
+
+    const box = document.getElementById(id);
+    if (!box) return;
+    const els = box.querySelectorAll('.t-label,.t-headline,.t-sub,.t-chip');
+
+    if (shouldShow) {
+      gsap.killTweensOf(els);
+      gsap.to(els, { opacity: 1, y: 0, duration: .65, stagger: .1, ease: 'power3.out' });
+    } else {
+      gsap.killTweensOf(els);
+      gsap.to(els, { opacity: 0, y: shouldShow ? 18 : -14, duration: .4, stagger: .05, ease: 'power2.in' });
     }
   });
 }
@@ -1149,18 +1150,20 @@ preload().then(() => {
   const driver = document.getElementById('frame-driver');
   const proxy  = { f: 0 };
 
-  // Frame sequence scrub
+  // Single ScrollTrigger drives both frames AND text panels
   ScrollTrigger.create({
     trigger: driver,
     start: 'top top',
     end:   'bottom bottom',
     scrub: 0.9,
     onUpdate: self => {
+      const pct    = self.progress * 100;
       const target = self.progress * (TOTAL - 1);
       proxy.f += (target - proxy.f) * 0.4;
       drawFrame(proxy.f);
+      syncPanels(pct);
 
-      // progress bar
+      // global progress bar
       const tot = document.documentElement.scrollHeight - window.innerHeight;
       document.getElementById('progress').style.width =
         (window.scrollY / tot * 100).toFixed(2) + '%';
@@ -1176,13 +1179,6 @@ preload().then(() => {
       scrub: 1.5,
     }
   });
-
-  // Text panels
-  animatePanel('tp1', driver,  2, 20);
-  animatePanel('tp2', driver, 22, 41);
-  animatePanel('tp3', driver, 44, 62);
-  animatePanel('tp4', driver, 65, 81);
-  animatePanel('tp5', driver, 84, 97);
 
   ScrollTrigger.refresh();
 });
